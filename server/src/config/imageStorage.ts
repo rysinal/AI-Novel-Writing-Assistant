@@ -24,6 +24,7 @@ export const imageStorageConfig = {
   s3Endpoint: process.env.IMAGE_STORAGE_S3_ENDPOINT?.trim() || process.env.MINIO_ENDPOINT?.trim() || "",
   s3Region: process.env.IMAGE_STORAGE_S3_REGION?.trim() || process.env.MINIO_REGION?.trim() || "us-east-1",
   s3Bucket: process.env.IMAGE_STORAGE_S3_BUCKET?.trim() || process.env.MINIO_BUCKET?.trim() || "",
+  s3Prefix: process.env.IMAGE_STORAGE_S3_PREFIX?.trim().replace(/^\/+|\/+$/g, "") || "",
   s3AccessKeyId:
     process.env.IMAGE_STORAGE_S3_ACCESS_KEY_ID?.trim() || process.env.MINIO_ACCESS_KEY?.trim() || "",
   s3SecretAccessKey:

@@ -192,7 +192,9 @@ export async function persistGeneratedImageAsset(input: PersistGeneratedImageInp
   const { localPath, relativePath } = buildStorageSegments(input, extension);
 
   if (isS3ImageStorageEnabled()) {
-    const storageKey = normalizeStorageKey(relativePath);
+    const storageKey = normalizeStorageKey(
+      [imageStorageConfig.s3Prefix, relativePath].filter(Boolean).join("/"),
+    );
     if (!storageKey) {
       throw new AppError("Image object storage key is invalid.", 500);
     }

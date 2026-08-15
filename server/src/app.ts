@@ -1,6 +1,8 @@
 import "dotenv/config";
+import fs from "node:fs";
 import type { Server } from "node:http";
 import os from "node:os";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -8,6 +10,7 @@ import morgan from "morgan";
 import type { ApiResponse } from "@ai-novel/shared/types/api";
 import { ensureRuntimeDatabaseReady } from "./db/runtimeMigrations";
 import { errorHandler } from "./middleware/errorHandler";
+import { assertProductionAuthConfigured, authMiddleware } from "./middleware/auth";
 import { loadProviderApiKeys } from "./llm/factory";
 import astrologyRouter from "./routes/astrology";
 import agentCatalogRouter from "./routes/agentCatalog";
@@ -61,7 +64,7 @@ import onboardingRoutes from "./modules/setup/onboarding/http/onboardingRoutes";
 import { qualityDebtSettingsService } from "./services/settings/QualityDebtSettingsService";
 import { DirectorWorker } from "./workers/directorWorker";
 import { cleanupLogDirectory, resolveLogRetentionConfig } from "./platform/logging/logRetention";
-import { resolveLogsRoot } from "./runtime/appPaths";
+import { resolveLogsRoot, resolveWorkspaceRoot } from "./runtime/appPaths";
 
 getSharedNovelServices();
 registerNovelEventHandlers(novelEventBus);
@@ -80,6 +83,22 @@ morgan.token("error-message", (_req, res) => {
 function parseEnvFlag(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) return defaultValue;
   return value === "true" || value === "1";
+}
+
+function mountWebClient(app: express.Express): void {
+  const configuredDir = process.env.AI_NOVEL_WEB_DIST_DIR?.trim();
+  const distDir = configuredDir ? path.resolve(configuredDir) : path.join(resolveWorkspaceRoot(), "client", "dist");
+  const indexPath = path.join(distDir, "index.html");
+  if (!fs.existsSync(indexPath)) return;
+
+  app.use(express.static(distDir));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path === "/api" || req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(indexPath);
+  });
 }
 
 export function createApp() {
@@ -124,6 +143,7 @@ export function createApp() {
   app.use(express.json({ limit: jsonBodyLimit }));
 
   app.use("/api/health", healthRouter);
+  app.use(authMiddleware);
   app.use("/api/agent-catalog", agentCatalogRouter);
   app.use("/api/agent-runs", agentRunsRouter);
   app.use("/api/book-analysis", bookAnalysisRouter);
@@ -159,6 +179,8 @@ export function createApp() {
   app.use("/api/settings", settingsRouter);
   app.use("/api", onboardingRoutes);
   app.use("/api/astrology", astrologyRouter);
+
+  mountWebClient(app);
 
   app.use((_req, res) => {
     const response: ApiResponse<null> = {
@@ -308,6 +330,7 @@ function initializeBackgroundServices(): BackgroundServicesHandle {
 
 export async function startServer(options?: ServerStartOptions): Promise<StartedServer> {
   scheduleLogRetentionCleanup();
+  assertProductionAuthConfigured();
   await ensureRuntimeDatabaseReady();
 
   const ragCompatibilityReport = await initializeRagSettingsCompatibility();
