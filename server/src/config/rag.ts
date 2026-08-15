@@ -25,7 +25,11 @@ function isEnabled(rawValue: string | undefined, defaultValue: boolean): boolean
 }
 
 function asInt(rawValue: string | undefined, fallback: number, min: number, max: number): number {
-  const parsed = Number(rawValue ?? "");
+  const normalized = rawValue?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) {
     return fallback;
   }
@@ -34,7 +38,11 @@ function asInt(rawValue: string | undefined, fallback: number, min: number, max:
 }
 
 function asFloat(rawValue: string | undefined, fallback: number, min: number, max: number): number {
-  const parsed = Number(rawValue ?? "");
+  const normalized = rawValue?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) {
     return fallback;
   }
