@@ -38,4 +38,13 @@ public -> ai-novel -> PostgreSQL (private, independent database/role)
 - `IMAGE_STORAGE_S3_SECRET_ACCESS_KEY`
 - `IMAGE_STORAGE_S3_FORCE_PATH_STYLE=true`
 
+## Required Qdrant variables
+
+- `QDRANT__SERVICE__HOST=::`
+- `QDRANT__SERVICE__API_KEY`
+- `QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage`
+- `QDRANT__TELEMETRY_DISABLED=true`
+
+`QDRANT__SERVICE__HOST=::` is required for Railway environments whose private network resolves service names to IPv6. Keep Qdrant private-only and mount its volume at the same storage path.
+
 PostgreSQL migrations run as the Railway pre-deploy command. A failed migration blocks the new release before application traffic is switched.
