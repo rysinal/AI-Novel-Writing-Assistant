@@ -165,15 +165,16 @@ export class NovelDirectorCandidateRuntime {
     if (directorSessionPhase && directorSessionPhase !== "candidate_selection") {
       return false;
     }
+    // 恢复命令可能临时把 currentItemKey 投影为 approve_gate，持久化阶段才是候选流程真值。
+    if (directorSessionPhase === "candidate_selection") {
+      return true;
+    }
 
     if (currentItemKey && !isCandidateStageItem && input.checkpointType !== "candidate_selection_required") {
       return false;
     }
 
     if (input.checkpointType === "candidate_selection_required" && (isCandidateStageItem || !currentItemKey)) {
-      return true;
-    }
-    if (directorSessionPhase === "candidate_selection") {
       return true;
     }
     if (input.seedPayload.candidateStage) {
