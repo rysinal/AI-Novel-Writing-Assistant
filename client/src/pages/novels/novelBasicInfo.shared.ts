@@ -47,6 +47,12 @@ export interface BasicInfoOption<T extends string> {
 
 export const DEFAULT_ESTIMATED_CHAPTER_COUNT = 80;
 
+export function formatEstimatedChapterCountSummary(value: unknown): string {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 2000
+    ? `约 ${value} 章`
+    : "章节数按候选方案";
+}
+
 export const WRITING_MODE_OPTIONS: BasicInfoOption<NovelBasicFormState["writingMode"]>[] = [
   {
     value: "original",

@@ -3,6 +3,7 @@ import type { StyleIntentSummary } from "@ai-novel/shared/types/styleEngine";
 import type { NovelBasicFormState } from "../novelBasicInfo.shared";
 import {
   EMOTION_OPTIONS,
+  formatEstimatedChapterCountSummary,
   PACE_OPTIONS,
   POV_OPTIONS,
   READER_CHANNEL_OPTIONS,
@@ -46,7 +47,7 @@ export function summarizeBasicStage(basicForm: NovelBasicFormState): string {
     findLabel(POV_OPTIONS, basicForm.narrativePov),
     findLabel(PACE_OPTIONS, basicForm.pacePreference),
     findLabel(EMOTION_OPTIONS, basicForm.emotionIntensity),
-    `约 ${basicForm.estimatedChapterCount} 章`,
+    formatEstimatedChapterCountSummary(basicForm.estimatedChapterCount),
   ].join(" · ");
 }
 
