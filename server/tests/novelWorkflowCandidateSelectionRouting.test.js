@@ -190,6 +190,7 @@ test("recordCandidateSelectionRequired rewrites stale resume targets back to aut
   const originalGetVisibleRowById = service.getVisibleRowById;
   const originalUpdate = prisma.novelWorkflowTask.update;
   let capturedResumeTargetJson = null;
+  let capturedLastError = "not-updated";
 
   service.getVisibleRowById = async () => ({
     id: "task_candidate_checkpoint",
@@ -198,9 +199,11 @@ test("recordCandidateSelectionRequired rewrites stale resume targets back to aut
     progress: 0.15,
     seedPayloadJson: null,
     milestonesJson: null,
+    lastError: "[STRUCTURED_OUTPUT:transport_error] Connection error.",
   });
   prisma.novelWorkflowTask.update = async ({ data }) => {
     capturedResumeTargetJson = data.resumeTargetJson ?? null;
+    capturedLastError = data.lastError;
     return {
       id: "task_candidate_checkpoint",
       ...data,
@@ -216,6 +219,7 @@ test("recordCandidateSelectionRequired rewrites stale resume targets back to aut
       resumeTargetToRoute(JSON.parse(capturedResumeTargetJson)),
       "/novels/auto-director?taskId=task_candidate_checkpoint",
     );
+    assert.equal(capturedLastError, null);
   } finally {
     service.getVisibleRowById = originalGetVisibleRowById;
     prisma.novelWorkflowTask.update = originalUpdate;

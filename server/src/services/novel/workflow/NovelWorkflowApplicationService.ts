@@ -459,6 +459,7 @@ export class NovelWorkflowApplicationService {
         currentItemLabel: "等待确认书级方向",
         checkpointType: "candidate_selection_required",
         checkpointSummary: input.summary,
+        lastError: null,
         resumeTargetJson: stringifyResumeTarget(buildNovelCreateResumeTarget(taskId, "director")),
         progress: Math.max(existing.progress, defaultProgressForStage("auto_director")),
         heartbeatAt: new Date(),
