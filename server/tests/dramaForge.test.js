@@ -195,6 +195,24 @@ test("http drama video provider maps create and status responses", async () => {
       res.end(JSON.stringify({ taskId: "task_fail", status: "error", message: "quota exceeded" }));
       return;
     }
+    if (req.method === "POST" && req.url === "/videos/generations") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        createBodies.push(body ? JSON.parse(body) : {});
+        res.end(JSON.stringify({ request_id: "video_request" }));
+      });
+      return;
+    }
+    if (req.method === "GET" && req.url === "/videos/video_request") {
+      res.end(JSON.stringify({
+        status: "done",
+        video: { url: "https://example.test/grok-video.mp4", duration: 5 },
+      }));
+      return;
+    }
     res.statusCode = 404;
     res.end(JSON.stringify({ error: "not found" }));
   });
@@ -243,6 +261,32 @@ test("http drama video provider maps create and status responses", async () => {
     const failed = await provider.getTask("task_fail");
     assert.equal(failed.status, "failed");
     assert.equal(failed.failureReason, "quota exceeded");
+
+    const proxyProvider = new HttpVideoProvider({
+      provider: "cli-proxy",
+      createUrl: `${baseUrl}/videos/generations`,
+      statusUrl: `${baseUrl}/videos/{taskId}`,
+      requestFormat: "openai_videos",
+      model: "grok-imagine-video",
+      resolution: "480p",
+    });
+    const proxyCreated = await proxyProvider.createTask({
+      prompt: "paper airplane",
+      aspectRatio: "16:9",
+      durationSec: 5,
+    });
+    assert.equal(proxyCreated.providerTaskId, "video_request");
+    assert.equal(proxyCreated.status, "queued");
+    assert.deepEqual(createBodies[2], {
+      model: "grok-imagine-video",
+      prompt: "paper airplane",
+      duration: 5,
+      aspect_ratio: "16:9",
+      resolution: "480p",
+    });
+    const proxyCompleted = await proxyProvider.getTask("video_request");
+    assert.equal(proxyCompleted.status, "succeeded");
+    assert.equal(proxyCompleted.resultUrl, "https://example.test/grok-video.mp4");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

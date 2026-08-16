@@ -94,23 +94,45 @@ function normalizeBooleanFlag(value: unknown): boolean {
   return ["1", "true", "yes", "y", "on"].includes(raw);
 }
 
-function buildProviderCreateBody(
-  input: VideoGenerationRequest,
-  supportsRefImages: boolean,
-): VideoGenerationRequest {
-  if (supportsRefImages) {
-    return input;
+type HttpVideoRequestFormat = "generic" | "openai_videos";
+
+function buildProviderCreateBody(input: VideoGenerationRequest, config: {
+  supportsRefImages: boolean;
+  requestFormat: HttpVideoRequestFormat;
+  model?: string;
+  resolution?: string;
+}): Record<string, unknown> {
+  if (config.requestFormat === "openai_videos") {
+    return {
+      model: config.model,
+      prompt: input.prompt,
+      duration: input.durationSec,
+      aspect_ratio: input.aspectRatio,
+      resolution: config.resolution,
+    };
+  }
+  if (config.supportsRefImages) {
+    return { ...input };
   }
   const { refImages: _refImages, ...rest } = input;
   return rest;
 }
 
+function readNestedVideoUrl(payload: Record<string, unknown>): string | undefined {
+  const video = payload.video;
+  if (!video || typeof video !== "object") {
+    return undefined;
+  }
+  return readStringField(video as Record<string, unknown>, ["url"]);
+}
+
 function normalizeProviderPayload(payload: Record<string, unknown>, fallbackTaskId: string): VideoGenerationResult {
   const status = normalizeStatus(payload.status);
   return {
-    providerTaskId: readStringField(payload, ["providerTaskId", "taskId", "id", "requestId"]) ?? fallbackTaskId,
+    providerTaskId: readStringField(payload, ["providerTaskId", "taskId", "id", "requestId", "request_id"])
+      ?? fallbackTaskId,
     status,
-    resultUrl: readStringField(payload, ["resultUrl", "videoUrl", "url"]),
+    resultUrl: readStringField(payload, ["resultUrl", "videoUrl", "url"]) ?? readNestedVideoUrl(payload),
     failureReason: status === "failed" ? readStringField(payload, ["failureReason", "error", "message"]) : undefined,
     raw: payload,
   };
@@ -145,6 +167,9 @@ export class HttpVideoProvider implements VideoProviderPort {
     apiKey?: string;
     timeoutMs?: number;
     supportsRefImages?: boolean;
+    requestFormat?: HttpVideoRequestFormat;
+    model?: string;
+    resolution?: string;
     costPerSecond?: number;
     currency?: string;
   }) {
@@ -159,7 +184,12 @@ export class HttpVideoProvider implements VideoProviderPort {
   async createTask(input: VideoGenerationRequest): Promise<VideoGenerationResult> {
     const payload = await this.postJson(
       this.config.createUrl,
-      buildProviderCreateBody(input, this.supportsRefImages),
+      buildProviderCreateBody(input, {
+        supportsRefImages: this.supportsRefImages,
+        requestFormat: this.config.requestFormat ?? "generic",
+        model: this.config.model,
+        resolution: this.config.resolution,
+      }),
     );
     return normalizeProviderPayload(payload, `http_${Date.now()}`);
   }
@@ -261,6 +291,11 @@ if (httpCreateUrl) {
     apiKey: process.env.DRAMA_VIDEO_HTTP_API_KEY?.trim() || undefined,
     timeoutMs: normalizeTimeoutMs(process.env.DRAMA_VIDEO_HTTP_TIMEOUT_MS),
     supportsRefImages: normalizeBooleanFlag(process.env.DRAMA_VIDEO_HTTP_SUPPORTS_REF_IMAGES),
+    requestFormat: process.env.DRAMA_VIDEO_HTTP_REQUEST_FORMAT === "openai_videos"
+      ? "openai_videos"
+      : "generic",
+    model: process.env.DRAMA_VIDEO_HTTP_MODEL?.trim() || undefined,
+    resolution: process.env.DRAMA_VIDEO_HTTP_RESOLUTION?.trim() || undefined,
     costPerSecond: normalizeCostValue(process.env.DRAMA_VIDEO_HTTP_COST_PER_SECOND),
     currency: process.env.DRAMA_VIDEO_HTTP_COST_CURRENCY?.trim() || readCostCurrency(),
   }));
