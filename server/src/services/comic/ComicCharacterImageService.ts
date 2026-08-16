@@ -98,7 +98,17 @@ function sheetUrl(charId: string): string {
 }
 
 function expressionUrl(charId: string): string {
-  return `/api/comic/character-images/${charId}/expression`;
+  return `/api/comic/character-images/${charId}/expressions`;
+}
+
+async function saveCharacterSheetData(charId: string, data: CharacterSheetData): Promise<void> {
+  const result = await prisma.comicCharacter.updateMany({
+    where: { id: charId },
+    data: { sheetData: JSON.stringify(data) },
+  });
+  if (result.count === 0) {
+    throw new AppError("人物列表已更新，本次人物稿无法保存。请刷新页面后重新生成。", 409);
+  }
 }
 
 function archivedSheetUrl(charId: string, version: number): string {
@@ -356,9 +366,7 @@ export class ComicCharacterImageService {
     const adapter: ImageTargetAdapter<CharacterSheetData> = {
       kind: `comic.character.sheet:${charId}`,
       loadState: async () => safeJsonParse<CharacterSheetData>(character.sheetData, { status: "idle" }),
-      saveState: async (next) => {
-        await prisma.comicCharacter.update({ where: { id: charId }, data: { sheetData: JSON.stringify(next) } });
-      },
+      saveState: async (next) => saveCharacterSheetData(charId, next),
       diskPath: (ext) => path.join(comicCharacterDir(charId), `character-sheet.${ext}`),
       publicUrl: () => sheetUrl(charId),
       cleanupOtherExts: (keepExt) => removeOldAssetFiles(charId, "character-sheet", keepExt),
@@ -464,7 +472,7 @@ export class ComicCharacterImageService {
           status: sheet.status ?? "idle",
           assets: { ...(sheet.assets ?? {}), expression: next },
         };
-        await prisma.comicCharacter.update({ where: { id: charId }, data: { sheetData: JSON.stringify(merged) } });
+        await saveCharacterSheetData(charId, merged);
       },
       diskPath: (ext) => path.join(comicCharacterDir(charId), `character-expression.${ext}`),
       publicUrl: () => expressionUrl(charId),

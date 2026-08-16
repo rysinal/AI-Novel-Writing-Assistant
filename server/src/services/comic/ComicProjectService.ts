@@ -11,7 +11,12 @@ import { novelSourceAdapter } from "../adaptation/source/NovelSourceAdapter";
 import type { AdaptationSourceType, SourceBundle, SourceRef } from "../adaptation/contracts/sourceBundle";
 import { runStructuredPrompt } from "../../prompting/core/promptRunner";
 import { comicVisualAnchorRewritePrompt, type ComicVisualAnchorRewriteOutput } from "../../prompting/prompts/comic/comic.prompts";
+import { AppError } from "../../middleware/errorHandler";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
+import {
+  isComicCharacterGenerationActive,
+  planComicCharacterSourceSync,
+} from "./characters/sourceSync";
 
 adaptationSourceRegistry.register(novelSourceAdapter);
 
@@ -259,6 +264,24 @@ export class ComicProjectService {
 
     // 事务：落库 sourceBundle + characters
     await prisma.$transaction(async (tx) => {
+      const existingCharacters = await tx.comicCharacter.findMany({
+        where: { projectId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          name: true,
+          sourceCharacterRef: true,
+          sheetData: true,
+          assets: { select: { imageData: true } },
+        },
+      });
+      if (existingCharacters.some((character) => isComicCharacterGenerationActive({
+        ...character,
+        assetImageData: character.assets.map((asset) => asset.imageData),
+      }))) {
+        throw new AppError("人物图片正在生成，请等待生成完成后再重新导入内容源。", 409);
+      }
+
       // 幂等：已存在则替换
       await tx.comicSourceBundle.upsert({
         where: { projectId },
@@ -266,11 +289,28 @@ export class ComicProjectService {
         update: { bundleJson: JSON.stringify(bundle), importedAt: new Date() },
       });
 
-      // 删除旧角色资源再重建（保证与源同步）
-      await tx.comicCharacter.deleteMany({ where: { projectId } });
-      if (bundle.characters.length > 0) {
+      const syncPlan = planComicCharacterSourceSync(
+        existingCharacters.map((character) => ({
+          ...character,
+          assetImageData: character.assets.map((asset) => asset.imageData),
+        })),
+        bundle.characters,
+      );
+      for (const { existingId, incoming } of syncPlan.matches) {
+        await tx.comicCharacter.update({
+          where: { id: existingId },
+          data: {
+            name: incoming.name,
+            gender: incoming.gender ?? "unknown",
+            persona: incoming.persona ?? null,
+            visualAnchor: buildComicVisualAnchor(incoming),
+            sourceCharacterRef: incoming.sourceCharacterRef ?? null,
+          },
+        });
+      }
+      if (syncPlan.creates.length > 0) {
         await tx.comicCharacter.createMany({
-          data: bundle.characters.map((character) => ({
+          data: syncPlan.creates.map((character) => ({
             projectId,
             name: character.name,
             gender: character.gender ?? "unknown",
@@ -278,6 +318,11 @@ export class ComicProjectService {
             visualAnchor: buildComicVisualAnchor(character),
             sourceCharacterRef: character.sourceCharacterRef ?? null,
           })),
+        });
+      }
+      if (syncPlan.deleteIds.length > 0) {
+        await tx.comicCharacter.deleteMany({
+          where: { projectId, id: { in: syncPlan.deleteIds } },
         });
       }
 

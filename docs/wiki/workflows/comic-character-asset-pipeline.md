@@ -15,6 +15,8 @@
 
 这些资产继续挂在 `ComicCharacter.sheetData` 中，表情稿状态放在 `sheetData.assets.expression`，避免为了早期资产扩展引入数据库迁移。
 
+内容源重复导入时必须保持角色身份稳定。同步优先按 `sourceCharacterRef`，其次按精确角色名复用现有 `ComicCharacter.id`，只更新来源字段并保留三视图、表情稿和用户资产；只删除新内容源中确实不存在的角色。三视图、表情稿或角色资产仍处于 `generating` 时禁止重新导入，避免异步生图结果回写到已被替换的角色记录。
+
 ## Current Rule
 
 分格脚本的 `characterRefs` 应输出对象数组，而不是仅输出角色名：
