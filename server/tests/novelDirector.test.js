@@ -52,6 +52,7 @@ function requestJson(port, method, path, body) {
 test("director task routes accept task creation, command append and snapshot reads", async (t) => {
   const originals = {
     enqueueGenerateCandidatesCommand: DirectorCommandService.prototype.enqueueGenerateCandidatesCommand,
+    enqueueConfirmCandidateCommand: DirectorCommandService.prototype.enqueueConfirmCandidateCommand,
     enqueueContinueCommand: DirectorCommandService.prototype.enqueueContinueCommand,
     getTaskSnapshot: DirectorTaskSnapshotService.prototype.getTaskSnapshot,
   };
@@ -77,6 +78,17 @@ test("director task routes accept task creation, command append and snapshot rea
       commandType: "continue",
       status: "queued",
       projectionUrl: `/api/novels/director/tasks/${taskId}`,
+    };
+  };
+  DirectorCommandService.prototype.enqueueConfirmCandidateCommand = async function mockConfirm(payload) {
+    calls.push(["confirm", payload.workflowTaskId, payload.estimatedChapterCount]);
+    return {
+      commandId: "command-confirm",
+      taskId: payload.workflowTaskId,
+      novelId: null,
+      commandType: "confirm_candidate",
+      status: "queued",
+      projectionUrl: `/api/novels/director/tasks/${payload.workflowTaskId}`,
     };
   };
   DirectorTaskSnapshotService.prototype.getTaskSnapshot = async function mockSnapshot(taskId) {
@@ -125,6 +137,7 @@ test("director task routes accept task creation, command append and snapshot rea
 
   t.after(() => {
     DirectorCommandService.prototype.enqueueGenerateCandidatesCommand = originals.enqueueGenerateCandidatesCommand;
+    DirectorCommandService.prototype.enqueueConfirmCandidateCommand = originals.enqueueConfirmCandidateCommand;
     DirectorCommandService.prototype.enqueueContinueCommand = originals.enqueueContinueCommand;
     DirectorTaskSnapshotService.prototype.getTaskSnapshot = originals.getTaskSnapshot;
   });
@@ -155,6 +168,31 @@ test("director task routes accept task creation, command append and snapshot rea
   assert.equal(continueResponse.status, 202);
   assert.equal(continueResponse.body.data.commandId, "command-continue");
 
+  const confirmResponse = await requestJson(port, "POST", "/api/novels/director/tasks/task-created/commands", {
+    commandType: "confirm_candidate",
+    payload: {
+      idea: "A rookie courier discovers a hidden city rule system.",
+      estimatedChapterCount: null,
+      candidate: {
+        id: "candidate-restored",
+        workingTitle: "Rulebound Courier",
+        logline: "A rookie courier discovers a hidden city rule system.",
+        positioning: "A fast-paced urban fantasy.",
+        sellingPoint: "Rules turn every delivery into a survival puzzle.",
+        coreConflict: "The courier must break the system without exposing the hidden city.",
+        protagonistPath: "From disposable runner to rule-breaking leader.",
+        endingDirection: "The courier rewrites the city's final delivery rule.",
+        hookStrategy: "Each delivery reveals a more dangerous hidden rule.",
+        progressionLoop: "Accept delivery, decode rule, survive consequence, gain leverage.",
+        whyItFits: "It converts the initial idea into a repeatable long-form engine.",
+        toneKeywords: ["tense", "urban", "mysterious"],
+        targetChapterCount: 120,
+      },
+    },
+  });
+  assert.equal(confirmResponse.status, 202);
+  assert.equal(confirmResponse.body.data.commandId, "command-confirm");
+
   const snapshotResponse = await requestJson(port, "GET", "/api/novels/director/tasks/task-created");
   assert.equal(snapshotResponse.status, 200);
   assert.equal(snapshotResponse.body.data.snapshot.task.id, "task-created");
@@ -163,6 +201,7 @@ test("director task routes accept task creation, command append and snapshot rea
   assert.deepEqual(calls, [
     ["create", "A rookie courier discovers a hidden city rule system."],
     ["continue", "task-created", "resume"],
+    ["confirm", "task-created", undefined],
     ["snapshot", "task-created"],
   ]);
 });

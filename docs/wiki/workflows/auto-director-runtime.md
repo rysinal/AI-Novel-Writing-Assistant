@@ -64,6 +64,7 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 - 高优先级硬约束：自动导演不是第二套章节生成系统。控制面可以有导演专属 command、projection 和审批策略，但正文生成与正文修复的业务执行链必须与手动单章和批量执行共用同一套 runtime。
 - 继续、恢复、重试、接管、审批、取消等用户动作先转为 command，不各自维护独立业务流程。
 - 小说项目尚未创建且任务 Seed 明确处于 `candidate_selection` 时，Seed 阶段是候选恢复的业务真值。command 接收后产生的 `approve_gate` 等 `currentItemKey` 只属于临时运行投影，不能覆盖候选阶段并把任务误判成缺少 `novelId`；小说创建并绑定 `novelId` 后才退出候选恢复分支。
+- 历史候选任务可能把未填写的 `estimatedChapterCount` 持久化为 `null`。确认候选的 HTTP 边界应将其归一为未提供，由确认运行时采用所选候选的 `targetChapterCount`；不能让历史空值在进入 command 前触发参数校验失败。
 - `DirectorRunCommand` 表达控制面命令、租约和幂等，不表达业务完成事实。
 - `DirectorRun` 是书级导演运行的根状态，`DirectorStepRun` 是步骤执行记录，`DirectorEvent` 和 `DirectorArtifact` 用于投影和恢复。
 - StepModule 应声明输入、输出、产物、进度检查和恢复策略；Pipeline 只编排，不直接知道具体业务表和 Prompt 细节。
@@ -134,6 +135,7 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 
 - 点击继续后普通查询接口一起挂起：优先检查是否有重型执行仍在 API 进程内运行。
 - 书级候选生成因模型连接中断后，点击继续却提示“自动导演任务缺少恢复所需上下文”：检查任务是否仍为 `novelId=null`、Seed 的 `directorSession.phase=candidate_selection`，但 `currentItemKey` 已被 command 临时投影为 `approve_gate`。恢复识别应优先使用显式候选阶段，不应要求尚未创建的小说 ID。
+- 恢复到方向候选后，确认方向提示 `payload / estimatedChapterCount：不能为空`：检查历史 Seed 的 `basicForm.estimatedChapterCount` 是否为 `null`。确认接口应把该兼容值归一为未提供，并使用所选候选的 `targetChapterCount`，不应要求用户回到已完成的起始设置补字段。
 - 点击“继续自动执行章节”后 toast 成功但没有新的 LLM 请求：优先检查 command 是否已成功执行但 `chapter_execution_node` 仍是 `waiting_approval`，以及 `auto_execute_range` 是否在恢复分支或质量提醒分支丢失了 `approveAutoExecutionScope`。
 - 点击 `replan_required` 状态的“继续自动导演”后没有新 LLM 请求：检查服务端是否仍把任务 checkpoint 透传为普通 `resume`。继续运行时必须按 checkpoint 自动规范化为质量债继续路径，前端按钮类型不能改变该语义。
 - 点击 `skip_quality_repair` 后直接越过空章节：检查质量债是否错误绑定到 `nextChapterOrder`。正确状态应把质量债绑定到刚完成并触发质量提醒的章节，状态重算后最早空正文章节仍应留在 `remainingChapterOrders` 首位。

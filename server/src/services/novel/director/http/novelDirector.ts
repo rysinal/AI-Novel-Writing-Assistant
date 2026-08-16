@@ -181,6 +181,8 @@ const refineTitleSchema = projectContextSchema.extend({
 }).merge(llmOptionsSchema);
 
 const confirmSchema = projectContextSchema.extend({
+  estimatedChapterCount: z.number().int().min(1).max(2000).nullish()
+    .transform((value) => value ?? undefined),
   idea: z.string().trim().min(1),
   batchId: z.string().trim().optional(),
   round: z.number().int().min(1).optional(),
